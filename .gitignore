@@ -1,0 +1,47 @@
+# ESP-IDF .gitignore
+
+# Build output
+build/
+
+# SDK config
+sdkconfig.old
+
+# Managed components (uncomment if you want to commit them)
+# managed_components/
+
+# ESP-IDF components (if building locally)
+esp-idf/
+
+# Binaries and executables
+*.bin
+*.elf
+*.map
+*.a
+*.o
+
+# Logs
+*.log
+log/
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model files and large data (specific to this project)
+managed_components/espressif__esp-sr/model/
+managed_components/espressif__esp-sr/lib/
+managed_components/espressif__esp-sr/esp-tts/
+srmodels/
