@@ -19,8 +19,7 @@
 #include "driver/rc522_spi.h"
 #include "rc522_picc.h"
 #include <esp_timer.h>
-
-static const char *TAG_2 = "RFID_APP";
+#include <nvs.h>
 
 // ============================================================
 // 1. CẤU HÌNH NGƯỜI DÙNG (THAY ĐỔI TẠI ĐÂY)
@@ -81,6 +80,11 @@ static const char *TAG_2 = "RFID_APP";
 #define RECORD_SIZE         (int)(SAMPLE_RATE * REC_TIME_SEC * 2) 
 #define SOUND_THRESHOLD     3000     // Giảm ngưỡng để test phát hiện âm thanh
 
+// Function prototypes
+void set_servo_angle(int angle);
+char* send_to_firebase(char *json_data, esp_http_client_method_t method, char *path);
+void get_firebase_data(void);
+
 static const char *TAG = "SMART_VOICE_FINAL";
 i2s_chan_handle_t rx_handle = NULL;
 adc_oneshot_unit_handle_t adc1_handle;
@@ -100,10 +104,51 @@ void blink_led() {
     esp_timer_start_once(led_blink_timer, 1000000); // 1 second
 }
 
+// Function to save UID to NVS
+esp_err_t save_uid(const char *uid) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(handle, "stored_uid", uid);
+    if (err != ESP_OK) {
+        nvs_close(handle);
+        return err;
+    }
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return err;
+}
+
+// Function to load UID from NVS
+char* load_uid() {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &handle);
+    if (err != ESP_OK) return NULL;
+    size_t len;
+    err = nvs_get_str(handle, "stored_uid", NULL, &len);
+    if (err != ESP_OK) {
+        nvs_close(handle);
+        return NULL;
+    }
+    char *uid = malloc(len);
+    if (!uid) {
+        nvs_close(handle);
+        return NULL;
+    }
+    err = nvs_get_str(handle, "stored_uid", uid, &len);
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        free(uid);
+        return NULL;
+    }
+    return uid;
+}
+
 // Device states
 int led_state = 0;
 int fan_state = 0;
 int door_angle = 0;
+int add_card = 0; // Flag to allow saving card UID
 
 // For Firebase GET
 static char g_firebase_body[512];
@@ -121,6 +166,34 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
         char uid_str[RC522_PICC_UID_STR_BUFFER_SIZE_MAX] = {0};
         if (rc522_picc_uid_to_str(&picc->uid, uid_str, sizeof(uid_str)) == ESP_OK) {
             ESP_LOGI(TAG, "RFID: UID=%s, Type=%s", uid_str, rc522_picc_type_name(picc->type));
+            
+            if (add_card == 1) {
+                // Save UID to NVS
+                if (save_uid(uid_str) == ESP_OK) {
+                    ESP_LOGI(TAG, "The da duoc luu: %s", uid_str);
+                    add_card = 0; // Reset flag locally
+                    // Send PATCH to Firebase to reset addCard
+                    send_to_firebase("{\"addCard\":0}", HTTP_METHOD_PATCH, "data.json");
+                    // Send POST to add new card
+                    char json_card[64];
+                    sprintf(json_card, "{\"card\":\"%s\"}", uid_str);
+                    send_to_firebase(json_card, HTTP_METHOD_POST, "card.json");
+                } else {
+                    ESP_LOGE(TAG, "Loi luu UID");
+                }
+            } else {
+                // Check if UID matches stored UID
+                char *stored_uid = load_uid();
+                if (stored_uid && strcmp(uid_str, stored_uid) == 0) {
+                    ESP_LOGI(TAG, "Mo cua cho UID: %s", uid_str);
+                    // Optionally, control servo or relay here
+                    set_servo_angle(90); // Open door
+                    door_angle = 90;
+                } else {
+                    ESP_LOGI(TAG, "UID khong hop le: %s", uid_str);
+                }
+                if (stored_uid) free(stored_uid);
+            }
         } else {
             ESP_LOGI(TAG, "RFID: Card detected (failed to format UID)");
         }
@@ -228,10 +301,6 @@ void wifi_init_sta(void) {
 // ============================================================
 // 3. HÀM XỬ LÝ JSON & ĐIỀU KHIỂN
 // ============================================================
-void set_servo_angle(int angle); // Prototype
-char* send_to_firebase(char *json_data, esp_http_client_method_t method); // Prototype
-void get_firebase_data(void); // Prototype
-
 void parse_wit_response(char *json_str) {
     // Parse chuỗi JSON
     cJSON *root = cJSON_Parse(json_str);
@@ -263,7 +332,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: BAT DEN (ON)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt")) && (strstr(cmd, "đèn") || strstr(cmd, "den"))) {
             gpio_set_level(LED_PIN, 0);
@@ -271,7 +340,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: TAT DEN (OFF)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Bật") || strstr(cmd, "bật") || strstr(cmd, "Mở") || strstr(cmd, "mở")) && strstr(cmd, "quạt")) {
             gpio_set_level(RELAY_FAN_PIN, 1);
@@ -279,7 +348,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: BAT QUAT (ON)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt")) && strstr(cmd, "quạt")) {
             gpio_set_level(RELAY_FAN_PIN, 0);
@@ -287,7 +356,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: TAT QUAT (OFF)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Mở") || strstr(cmd, "mở")) && strstr(cmd, "cửa")) {
             set_servo_angle(90); // Mở servo
@@ -295,7 +364,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: MO CUA SERVO (90deg)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Đóng") || strstr(cmd, "đóng")) && strstr(cmd, "cửa")) {
             set_servo_angle(0); // Đóng servo
@@ -303,7 +372,7 @@ void parse_wit_response(char *json_str) {
             ESP_LOGI(TAG, "--> THUC THI: DONG CUA SERVO (0deg)");
             char json[128];
             sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
 
         free(cmd); // Giải phóng chuỗi cmd
@@ -313,13 +382,13 @@ void parse_wit_response(char *json_str) {
 // ============================================================
 // 4.5. HÀM GỬI DỮ LIỆU LÊN FIREBASE
 // ============================================================
-char* send_to_firebase(char *json_data, esp_http_client_method_t method) {
+char* send_to_firebase(char *json_data, esp_http_client_method_t method, char *path) {
     if (!wifi_connected) { ESP_LOGE(TAG, "Chua co Wifi!"); return NULL; }
 
-    ESP_LOGI(TAG, "Sending to Firebase (PATCH): %s", json_data);
+    ESP_LOGI(TAG, "Sending to Firebase (%s): %s", method == HTTP_METHOD_PATCH ? "PATCH" : "POST", json_data);
 
     char url[256];
-    sprintf(url, "https://smart-944cb-default-rtdb.asia-southeast1.firebasedatabase.app/devices/%s/data.json", FIREBASE_DEVICE_ID);
+    sprintf(url, "https://smart-944cb-default-rtdb.asia-southeast1.firebasedatabase.app/devices/%s/%s", FIREBASE_DEVICE_ID, path);
 
     esp_http_client_config_t config = {
         .url = url,
@@ -343,9 +412,9 @@ char* send_to_firebase(char *json_data, esp_http_client_method_t method) {
     int status = esp_http_client_get_status_code(client);
 
     if (err == ESP_OK && (status >= 200 && status < 300)) {
-        ESP_LOGI(TAG, "Firebase PATCH status: %d", status);
+        ESP_LOGI(TAG, "Firebase %s status: %d", method == HTTP_METHOD_PATCH ? "PATCH" : "POST", status);
     } else {
-        ESP_LOGE(TAG, "Firebase PATCH failed: err=%d (Status=%d)", (int)err, status);
+        ESP_LOGE(TAG, "Firebase %s failed: err=%d (Status=%d)", method == HTTP_METHOD_PATCH ? "PATCH" : "POST", (int)err, status);
     }
 
     esp_http_client_cleanup(client);
@@ -414,6 +483,14 @@ void get_firebase_data(void) {
                 }
             } else {
                 ESP_LOGW(TAG, "doorAngle not found or not number");
+            }
+            
+            cJSON *add = cJSON_GetObjectItem(root, "addCard");
+            if (cJSON_IsNumber(add)) {
+                add_card = add->valueint;
+                ESP_LOGI(TAG, "Firebase addCard updated: %d", add_card);
+            } else {
+                ESP_LOGW(TAG, "addCard not found or not number");
             }
             
             cJSON_Delete(root);
@@ -600,7 +677,7 @@ void app_task(void *args) {
             // Gửi ngay lên Firebase khi vượt ngưỡng
             char json[64];
             sprintf(json, "{\"gasLevel\":%.0f}", gas_level);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
         
         // Đọc Flame Sensor liên tục
@@ -617,7 +694,7 @@ void app_task(void *args) {
                     // Gửi ngay lên Firebase khi có thay đổi
                     char json[64];
                     sprintf(json, "{\"flameDetected\":%d}", flame_detected);
-                    send_to_firebase(json, HTTP_METHOD_PATCH);
+                    send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
                 }
                 flame_debounce = 0;
             }
@@ -637,7 +714,7 @@ void app_task(void *args) {
                     // Gửi ngay lên Firebase khi có thay đổi
                     char json[64];
                     sprintf(json, "{\"rainDetected\":%d}", rain_detected);
-                    send_to_firebase(json, HTTP_METHOD_PATCH);
+                    send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
                 }
                 rain_debounce = 0;
             }
@@ -659,7 +736,7 @@ void app_task(void *args) {
             sensor_counter = 0;
             char json[128];
             sprintf(json, "{\"temperature\":%.1f,\"humidity\":%.1f,\"gasLevel\":%.0f}", temperature, humidity, gas_level);
-            send_to_firebase(json, HTTP_METHOD_PATCH);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
 
         // 1. Đọc mẫu nhỏ để check Volume
