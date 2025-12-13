@@ -1,0 +1,5 @@
+dependencies:
+  espressif/led_strip: ^3.0.0
+  espressif/cJSON: '*'
+  espressif/esp-sr: ^2.1.0
+  abobija/rc522: '*'

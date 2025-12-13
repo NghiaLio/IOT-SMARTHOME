@@ -1,0 +1,2 @@
+source D:/IOTT/wifi-config/build/bootloader/gdbinit/symbols
+source D:/IOTT/wifi-config/build/bootloader/gdbinit/connect

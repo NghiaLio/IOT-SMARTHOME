@@ -1,0 +1,20 @@
+{
+  "devices": {
+    "esp123": {
+      "authorized_users": {
+        "65k3llODYoZJcJRUJhzznJrtely2": true
+      },
+      "data": {
+        "doorAngle": 0,
+        "fanState": 0,
+        "flameDetected": 0,
+        "gasLevel": 237,
+        "humidity": 68,
+        "ledState": 0,
+        "rainDetected": 1,
+        "temperature": 26
+      },
+      "owner_uid": "65k3llODYoZJcJRUJhzznJrtely2"
+    }
+  }
+}

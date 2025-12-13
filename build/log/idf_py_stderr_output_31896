@@ -1,0 +1,9 @@
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Users\ADMIN\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DSDKCONFIG='d:\IOTT\wifi-config\sdkconfig' -DCCACHE_ENABLE=1 D:\IOTT\wifi-config
+CMake Error at C:/Users/ADMIN/esp/v5.5.1/esp-idf/tools/cmake/component.cmake:318 (message):
+  Include directory 'D:/IOTT/wifi-config/main/edge_impulse' is not a
+  directory.
+Call Stack (most recent call first):
+  C:/Users/ADMIN/esp/v5.5.1/esp-idf/tools/cmake/component.cmake:500 (__component_add_include_dirs)
+  main/CMakeLists.txt:1 (idf_component_register)
+
+
