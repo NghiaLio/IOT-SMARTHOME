@@ -49,6 +49,7 @@
 
 // Cấu hình Relay
 #define RELAY_FAN_PIN       GPIO_NUM_14
+#define RELAY_DOOR_PIN      GPIO_NUM_13
 
 // Cấu hình Servo cho Đèn
 #define SERVO_LIGHT_PIN     GPIO_NUM_8
@@ -72,7 +73,7 @@
 #define RAIN_PIN            GPIO_NUM_17  // Digital pin for rain sensor
 
 // Cấu hình Buzzer
-#define BUZZER_PIN          GPIO_NUM_18  // Buzzer pin for alarm
+#define BUZZER_PIN          GPIO_NUM_4  // Buzzer pin for alarm
 
 // Cấu hình Ghi âm (Đã tối ưu để không tràn RAM)
 #define SAMPLE_RATE         16000
@@ -93,15 +94,31 @@ bool wifi_connected = false;
 // Timer for LED blink
 esp_timer_handle_t led_blink_timer;
 
+// Timer for door close
+esp_timer_handle_t door_timer;
+
 // Callback to turn off LED after blink
 void led_blink_callback(void *arg) {
     gpio_set_level(LED_PIN, 0);
+}
+
+// Callback to close door after delay
+void door_close_callback(void *arg) {
+    set_servo_angle(0);
+    ESP_LOGI(TAG, "Door closed");
 }
 
 // Function to blink LED for 1 second
 void blink_led() {
     gpio_set_level(LED_PIN, 1);
     esp_timer_start_once(led_blink_timer, 1000000); // 1 second
+}
+
+// Function for short buzzer beep
+void buzzer_beep_short() {
+    gpio_set_level(BUZZER_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(200)); // 200ms beep
+    gpio_set_level(BUZZER_PIN, 0);
 }
 
 // Function to save UID to NVS
@@ -148,6 +165,7 @@ char* load_uid() {
 int led_state = 0;
 int fan_state = 0;
 int door_angle = 0;
+int ac_state = 0; // State for air conditioner
 int add_card = 0; // Flag to allow saving card UID
 
 // For Firebase GET
@@ -186,9 +204,11 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
                 char *stored_uid = load_uid();
                 if (stored_uid && strcmp(uid_str, stored_uid) == 0) {
                     ESP_LOGI(TAG, "Mo cua cho UID: %s", uid_str);
-                    // Optionally, control servo or relay here
+                    // Control servo for door
                     set_servo_angle(90); // Open door
                     door_angle = 90;
+                    buzzer_beep_short(); // Short buzzer beep on valid RFID
+                    esp_timer_start_once(door_timer, 5000000); // Close door after 5 seconds
                 } else {
                     ESP_LOGI(TAG, "UID khong hop le: %s", uid_str);
                 }
@@ -286,6 +306,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         wifi_connected = true;
         ESP_LOGI(TAG, ">> WIFI CONNECTED! <<");
         blink_led(); // Blink LED on WiFi connect
+        buzzer_beep_short(); // Short buzzer beep on WiFi connect
     }
 }
 void wifi_init_sta(void) {
@@ -331,7 +352,7 @@ void parse_wit_response(char *json_str) {
             led_state = 1;
             ESP_LOGI(TAG, "--> THUC THI: BAT DEN (ON)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt")) && (strstr(cmd, "đèn") || strstr(cmd, "den"))) {
@@ -339,7 +360,7 @@ void parse_wit_response(char *json_str) {
             led_state = 0;
             ESP_LOGI(TAG, "--> THUC THI: TAT DEN (OFF)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Bật") || strstr(cmd, "bật") || strstr(cmd, "Mở") || strstr(cmd, "mở")) && strstr(cmd, "quạt")) {
@@ -347,7 +368,7 @@ void parse_wit_response(char *json_str) {
             fan_state = 1;
             ESP_LOGI(TAG, "--> THUC THI: BAT QUAT (ON)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt")) && strstr(cmd, "quạt")) {
@@ -355,7 +376,23 @@ void parse_wit_response(char *json_str) {
             fan_state = 0;
             ESP_LOGI(TAG, "--> THUC THI: TAT QUAT (OFF)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
+        } 
+        else if ((strstr(cmd, "Bật") || strstr(cmd, "bật") || strstr(cmd, "Mở") || strstr(cmd, "mở")) && (strstr(cmd, "điều hòa") || strstr(cmd, "dieu hoa"))) {
+            gpio_set_level(RELAY_DOOR_PIN, 1);
+            ac_state = 1;
+            ESP_LOGI(TAG, "--> THUC THI: BAT DIEU HOA (ON)");
+            char json[128];
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
+            send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
+        }
+        else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt") || strstr(cmd, "Đóng") || strstr(cmd, "đóng")) && (strstr(cmd, "điều hòa") || strstr(cmd, "dieu hoa"))) {
+            gpio_set_level(RELAY_DOOR_PIN, 0);
+            ac_state = 0;
+            ESP_LOGI(TAG, "--> THUC THI: TAT DIEU HOA (OFF)");
+            char json[128];
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Mở") || strstr(cmd, "mở")) && strstr(cmd, "cửa")) {
@@ -363,7 +400,7 @@ void parse_wit_response(char *json_str) {
             door_angle = 90;
             ESP_LOGI(TAG, "--> THUC THI: MO CUA SERVO (90deg)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Đóng") || strstr(cmd, "đóng")) && strstr(cmd, "cửa")) {
@@ -371,9 +408,10 @@ void parse_wit_response(char *json_str) {
             door_angle = 0;
             ESP_LOGI(TAG, "--> THUC THI: DONG CUA SERVO (0deg)");
             char json[128];
-            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d}", led_state, fan_state, door_angle);
+            sprintf(json, "{\"ledState\":%d,\"fanState\":%d,\"doorAngle\":%d,\"acState\":%d}", led_state, fan_state, door_angle, ac_state);
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
+
 
         free(cmd); // Giải phóng chuỗi cmd
     }
@@ -471,6 +509,18 @@ void get_firebase_data(void) {
                 }
             } else {
                 ESP_LOGW(TAG, "fanState not found or not number");
+            }
+            
+            cJSON *ac = cJSON_GetObjectItem(root, "acState");
+            if (cJSON_IsNumber(ac)) {
+                int new_ac = ac->valueint;
+                if (new_ac != ac_state) {
+                    gpio_set_level(RELAY_DOOR_PIN, new_ac);
+                    ac_state = new_ac;
+                    ESP_LOGI(TAG, "Firebase AC updated: %d", ac_state);
+                }
+            } else {
+                ESP_LOGW(TAG, "acState not found or not number");
             }
             
             cJSON *door = cJSON_GetObjectItem(root, "doorAngle");
@@ -677,9 +727,12 @@ void app_task(void *args) {
             // Gửi ngay lên Firebase khi vượt ngưỡng
             char json[64];
             sprintf(json, "{\"gasLevel\":%.0f}", gas_level);
+            gpio_set_level(BUZZER_PIN, 1); // Bật còi báo động
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
+        }else if (gas_level <= 1500) {
+            prev_gas_level = gas_level; // Cập nhật giá trị bình thường
+            gpio_set_level(BUZZER_PIN, 0); // Tắt còi nếu mức bình thường
         }
-        
         // Đọc Flame Sensor liên tục
         int current_flame = !gpio_get_level(FLAME_PIN);
         if (current_flame == flame_detected) {
@@ -794,7 +847,7 @@ void init_microphone(void) {
             .bclk = I2S_SCK_PIN, 
             .ws = I2S_WS_PIN, 
             .din = I2S_SD_PIN, 
-            .mclk = I2S_MCLK_PIN,  // Sử dụng MCLK
+            .mclk = I2S_GPIO_UNUSED,  // Không sử dụng MCLK
             .dout = I2S_GPIO_UNUSED 
         },
     };
@@ -807,6 +860,8 @@ void init_led() {
     gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT); 
     gpio_reset_pin(RELAY_FAN_PIN); 
     gpio_set_direction(RELAY_FAN_PIN, GPIO_MODE_OUTPUT);
+    gpio_reset_pin(RELAY_DOOR_PIN); 
+    gpio_set_direction(RELAY_DOOR_PIN, GPIO_MODE_OUTPUT);
     gpio_config_t flame_config = {
         .pin_bit_mask = (1ULL << FLAME_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -824,8 +879,8 @@ void init_led() {
         .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&rain_config);
-    // gpio_set_direction(BUZZER_PIN, GPIO_MODE_OUTPUT); // Buzzer output
-    // gpio_set_level(BUZZER_PIN, 0); // Tắt còi ban đầu
+    gpio_set_direction(BUZZER_PIN, GPIO_MODE_OUTPUT); // Buzzer output
+    gpio_set_level(BUZZER_PIN, 0); // Tắt còi ban đầu
 }
 
 void init_servo() {
@@ -875,6 +930,12 @@ void app_main(void) {
         .name = "led_blink"
     };
     esp_timer_create(&timer_args, &led_blink_timer);
+    // Init door close timer
+    esp_timer_create_args_t door_timer_args = {
+        .callback = door_close_callback,
+        .name = "door_close"
+    };
+    esp_timer_create(&door_timer_args, &door_timer);
     init_servo();
     init_adc();
     wifi_init_sta();
