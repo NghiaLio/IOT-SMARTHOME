@@ -97,6 +97,10 @@ esp_timer_handle_t led_blink_timer;
 // Timer for door close
 esp_timer_handle_t door_timer;
 
+// Buzzer task
+TaskHandle_t buzzer_task_handle = NULL;
+bool buzzer_active = false;
+
 // Callback to turn off LED after blink
 void led_blink_callback(void *arg) {
     gpio_set_level(LED_PIN, 0);
@@ -106,6 +110,37 @@ void led_blink_callback(void *arg) {
 void door_close_callback(void *arg) {
     set_servo_angle(0);
     ESP_LOGI(TAG, "Door closed");
+}
+
+// Buzzer beep task
+void buzzer_beep_task(void *arg) {
+    while (buzzer_active) {
+        gpio_set_level(BUZZER_PIN, 1);
+        vTaskDelay(100 / portTICK_PERIOD_MS); // 100ms on
+        gpio_set_level(BUZZER_PIN, 0);
+        vTaskDelay(100 / portTICK_PERIOD_MS); // 100ms off
+    }
+    vTaskDelete(NULL);
+}
+
+// Function to start buzzer alarm
+void start_buzzer_alarm() {
+    if (!buzzer_active) {
+        buzzer_active = true;
+        xTaskCreate(buzzer_beep_task, "buzzer_alarm", 2048, NULL, 5, &buzzer_task_handle);
+    }
+}
+
+// Function to stop buzzer alarm
+void stop_buzzer_alarm() {
+    if (buzzer_active) {
+        buzzer_active = false;
+        if (buzzer_task_handle != NULL) {
+            vTaskDelete(buzzer_task_handle);
+            buzzer_task_handle = NULL;
+        }
+        gpio_set_level(BUZZER_PIN, 0);
+    }
 }
 
 // Function to blink LED for 1 second
@@ -727,11 +762,15 @@ void app_task(void *args) {
             // Gửi ngay lên Firebase khi vượt ngưỡng
             char json[64];
             sprintf(json, "{\"gasLevel\":%.0f}", gas_level);
-            gpio_set_level(BUZZER_PIN, 1); // Bật còi báo động
+            start_buzzer_alarm(); // Bật còi báo động
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }else if (gas_level <= 1500) {
             prev_gas_level = gas_level; // Cập nhật giá trị bình thường
-            gpio_set_level(BUZZER_PIN, 0); // Tắt còi nếu mức bình thường
+            // Check if flame is still detected
+            int current_flame = !gpio_get_level(FLAME_PIN);
+            if (!current_flame) {
+                stop_buzzer_alarm(); // Tắt còi nếu mức bình thường và không có lửa
+            }
         }
         // Đọc Flame Sensor liên tục
         int current_flame = !gpio_get_level(FLAME_PIN);
@@ -742,7 +781,16 @@ void app_task(void *args) {
                     ESP_LOGW(TAG, "Flame Detected: %d", flame_detected);
                     prev_flame_detected = flame_detected;
                     // Bật/Tắt còi báo động
-                    gpio_set_level(BUZZER_PIN, flame_detected);
+                    if (flame_detected) {
+                        start_buzzer_alarm();
+                    } else {
+                        // Check if gas is still high
+                        int gas_raw = 0;
+                        adc_oneshot_read(adc1_handle, GAS_ADC_CHANNEL, &gas_raw);
+                        if (gas_raw <= 1500) {
+                            stop_buzzer_alarm();
+                        }
+                    }
                     ESP_LOGI(TAG, "Buzzer State: %d", flame_detected);
                     // Gửi ngay lên Firebase khi có thay đổi
                     char json[64];
