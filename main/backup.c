@@ -49,7 +49,7 @@
 
 // Cấu hình Relay
 #define RELAY_FAN_PIN       GPIO_NUM_14
-#define RELAY_DOOR_PIN      GPIO_NUM_13
+#define RELAY_AC_PIN        GPIO_NUM_13
 
 // Cấu hình Servo cho Đèn
 #define SERVO_LIGHT_PIN     GPIO_NUM_8
@@ -97,6 +97,10 @@ esp_timer_handle_t led_blink_timer;
 // Timer for door close
 esp_timer_handle_t door_timer;
 
+// Buzzer task
+TaskHandle_t buzzer_task_handle = NULL;
+bool buzzer_active = false;
+
 // Callback to turn off LED after blink
 void led_blink_callback(void *arg) {
     gpio_set_level(LED_PIN, 0);
@@ -106,6 +110,37 @@ void led_blink_callback(void *arg) {
 void door_close_callback(void *arg) {
     set_servo_angle(0);
     ESP_LOGI(TAG, "Door closed");
+}
+
+// Buzzer beep task
+void buzzer_beep_task(void *arg) {
+    while (buzzer_active) {
+        gpio_set_level(BUZZER_PIN, 1);
+        vTaskDelay(100 / portTICK_PERIOD_MS); // 100ms on
+        gpio_set_level(BUZZER_PIN, 0);
+        vTaskDelay(100 / portTICK_PERIOD_MS); // 100ms off
+    }
+    vTaskDelete(NULL);
+}
+
+// Function to start buzzer alarm
+void start_buzzer_alarm() {
+    if (!buzzer_active) {
+        buzzer_active = true;
+        xTaskCreate(buzzer_beep_task, "buzzer_alarm", 2048, NULL, 5, &buzzer_task_handle);
+    }
+}
+
+// Function to stop buzzer alarm
+void stop_buzzer_alarm() {
+    if (buzzer_active) {
+        buzzer_active = false;
+        if (buzzer_task_handle != NULL) {
+            vTaskDelete(buzzer_task_handle);
+            buzzer_task_handle = NULL;
+        }
+        gpio_set_level(BUZZER_PIN, 0);
+    }
 }
 
 // Function to blink LED for 1 second
@@ -208,7 +243,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
                     set_servo_angle(90); // Open door
                     door_angle = 90;
                     buzzer_beep_short(); // Short buzzer beep on valid RFID
-                    esp_timer_start_once(door_timer, 5000000); // Close door after 5 seconds
+                    esp_timer_start_once(door_timer, 10000000); // Close door after 10 seconds
                 } else {
                     ESP_LOGI(TAG, "UID khong hop le: %s", uid_str);
                 }
@@ -292,6 +327,8 @@ float humidity = 0.0;
 float gas_level = 0.0;
 int flame_detected = 0;
 int rain_detected = 0;
+int emergency = 0;
+int rain_angle = 0;
 
 // ============================================================
 // 2. HÀM XỬ LÝ WIFI (BOILERPLATE)
@@ -364,7 +401,7 @@ void parse_wit_response(char *json_str) {
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Bật") || strstr(cmd, "bật") || strstr(cmd, "Mở") || strstr(cmd, "mở")) && strstr(cmd, "quạt")) {
-            gpio_set_level(RELAY_FAN_PIN, 1);
+            gpio_set_level(RELAY_FAN_PIN, 0);
             fan_state = 1;
             ESP_LOGI(TAG, "--> THUC THI: BAT QUAT (ON)");
             char json[128];
@@ -372,7 +409,7 @@ void parse_wit_response(char *json_str) {
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt")) && strstr(cmd, "quạt")) {
-            gpio_set_level(RELAY_FAN_PIN, 0);
+            gpio_set_level(RELAY_FAN_PIN, 1);
             fan_state = 0;
             ESP_LOGI(TAG, "--> THUC THI: TAT QUAT (OFF)");
             char json[128];
@@ -380,7 +417,7 @@ void parse_wit_response(char *json_str) {
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         } 
         else if ((strstr(cmd, "Bật") || strstr(cmd, "bật") || strstr(cmd, "Mở") || strstr(cmd, "mở")) && (strstr(cmd, "điều hòa") || strstr(cmd, "dieu hoa"))) {
-            gpio_set_level(RELAY_DOOR_PIN, 1);
+            gpio_set_level(RELAY_AC_PIN, 0);
             ac_state = 1;
             ESP_LOGI(TAG, "--> THUC THI: BAT DIEU HOA (ON)");
             char json[128];
@@ -388,7 +425,7 @@ void parse_wit_response(char *json_str) {
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
         else if ((strstr(cmd, "Tắt") || strstr(cmd, "tắt") || strstr(cmd, "Đóng") || strstr(cmd, "đóng")) && (strstr(cmd, "điều hòa") || strstr(cmd, "dieu hoa"))) {
-            gpio_set_level(RELAY_DOOR_PIN, 0);
+            gpio_set_level(RELAY_AC_PIN, 1);
             ac_state = 0;
             ESP_LOGI(TAG, "--> THUC THI: TAT DIEU HOA (OFF)");
             char json[128];
@@ -503,7 +540,7 @@ void get_firebase_data(void) {
             if (cJSON_IsNumber(fan)) {
                 int new_fan = fan->valueint;
                 if (new_fan != fan_state) {
-                    gpio_set_level(RELAY_FAN_PIN, new_fan);
+                    gpio_set_level(RELAY_FAN_PIN, !new_fan);
                     fan_state = new_fan;
                     ESP_LOGI(TAG, "Firebase Fan updated: %d", fan_state);
                 }
@@ -515,7 +552,7 @@ void get_firebase_data(void) {
             if (cJSON_IsNumber(ac)) {
                 int new_ac = ac->valueint;
                 if (new_ac != ac_state) {
-                    gpio_set_level(RELAY_DOOR_PIN, new_ac);
+                    gpio_set_level(RELAY_AC_PIN, !new_ac);
                     ac_state = new_ac;
                     ESP_LOGI(TAG, "Firebase AC updated: %d", ac_state);
                 }
@@ -727,11 +764,25 @@ void app_task(void *args) {
             // Gửi ngay lên Firebase khi vượt ngưỡng
             char json[64];
             sprintf(json, "{\"gasLevel\":%.0f}", gas_level);
-            gpio_set_level(BUZZER_PIN, 1); // Bật còi báo động
+            start_buzzer_alarm(); // Bật còi báo động
+            if (!emergency) {
+                emergency = 1;
+                // Mở cửa khi phát hiện khí gas vượt ngưỡng
+                set_servo_angle(90);
+                door_angle = 90;
+            }
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }else if (gas_level <= 1500) {
             prev_gas_level = gas_level; // Cập nhật giá trị bình thường
-            gpio_set_level(BUZZER_PIN, 0); // Tắt còi nếu mức bình thường
+            // Check if flame is still detected
+            int current_flame = !gpio_get_level(FLAME_PIN);
+            if (!current_flame && emergency) {
+                emergency = 0;
+                // Đóng cửa khi hết gas và hết lửa
+                set_servo_angle(0);
+                door_angle = 0;
+                stop_buzzer_alarm(); // Tắt còi nếu hết khẩn cấp
+            }
         }
         // Đọc Flame Sensor liên tục
         int current_flame = !gpio_get_level(FLAME_PIN);
@@ -742,7 +793,26 @@ void app_task(void *args) {
                     ESP_LOGW(TAG, "Flame Detected: %d", flame_detected);
                     prev_flame_detected = flame_detected;
                     // Bật/Tắt còi báo động
-                    gpio_set_level(BUZZER_PIN, flame_detected);
+                    if (flame_detected) {
+                        start_buzzer_alarm();
+                        if (!emergency) {
+                            emergency = 1;
+                            // Mở cửa khi phát hiện lửa
+                            set_servo_angle(90);
+                            door_angle = 90;
+                        }
+                    } else {
+                        // Check if gas is still high
+                        int gas_raw = 0;
+                        adc_oneshot_read(adc1_handle, GAS_ADC_CHANNEL, &gas_raw);
+                        if (gas_raw <= 1500 && emergency) {
+                            emergency = 0;
+                            // Đóng cửa khi hết lửa và hết gas
+                            set_servo_angle(0);
+                            door_angle = 0;
+                            stop_buzzer_alarm();
+                        }
+                    }
                     ESP_LOGI(TAG, "Buzzer State: %d", flame_detected);
                     // Gửi ngay lên Firebase khi có thay đổi
                     char json[64];
@@ -764,10 +834,22 @@ void app_task(void *args) {
                 if (rain_detected != prev_rain_detected) {
                     ESP_LOGW(TAG, "Rain Detected: %d", rain_detected);
                     prev_rain_detected = rain_detected;
+                    // Control rain servo
+                    if (rain_detected) {
+                        set_rain_servo_angle(0);
+                        rain_angle = 0;
+                    } else {
+                        set_rain_servo_angle(90);
+                        rain_angle = 90;
+                    }
                     // Gửi ngay lên Firebase khi có thay đổi
                     char json[64];
-                    sprintf(json, "{\"rainDetected\":%d}", rain_detected);
+                    sprintf(json, "{\"rainDetected\":%d,\"rainAngle\":%d}", rain_detected, rain_angle);
                     send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
+                    // Gửi riêng rain_angle
+                    char json_rain[32];
+                    sprintf(json_rain, "{\"rainAngle\":%d}", rain_angle);
+                    send_to_firebase(json_rain, HTTP_METHOD_PATCH, "data.json");
                 }
                 rain_debounce = 0;
             }
@@ -860,8 +942,10 @@ void init_led() {
     gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT); 
     gpio_reset_pin(RELAY_FAN_PIN); 
     gpio_set_direction(RELAY_FAN_PIN, GPIO_MODE_OUTPUT);
-    gpio_reset_pin(RELAY_DOOR_PIN); 
-    gpio_set_direction(RELAY_DOOR_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(RELAY_FAN_PIN, 1);
+    gpio_reset_pin(RELAY_AC_PIN); 
+    gpio_set_direction(RELAY_AC_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(RELAY_AC_PIN, 1);
     gpio_config_t flame_config = {
         .pin_bit_mask = (1ULL << FLAME_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -902,12 +986,38 @@ void init_servo() {
         .hpoint = 0
     };
     ledc_channel_config(&channel_conf);
+
+    // Config for rain servo
+    ledc_timer_config_t rain_timer_conf = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_13_BIT,
+        .timer_num = RAIN_SERVO_TIMER,
+        .freq_hz = 50,
+        .clk_cfg = LEDC_AUTO_CLK
+    };
+    ledc_timer_config(&rain_timer_conf);
+
+    ledc_channel_config_t rain_channel_conf = {
+        .gpio_num = RAIN_SERVO_PIN,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = RAIN_SERVO_CHANNEL,
+        .timer_sel = RAIN_SERVO_TIMER,
+        .duty = 0,
+        .hpoint = 0
+    };
+    ledc_channel_config(&rain_channel_conf);
 }
 
 void set_servo_angle(int angle) {
     uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL);
+}
+
+void set_rain_servo_angle(int angle) {
+    uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, RAIN_SERVO_CHANNEL, duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, RAIN_SERVO_CHANNEL);
 }
 
 void init_adc(void) {

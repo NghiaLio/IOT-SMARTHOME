@@ -161,15 +161,10 @@ $<TARGET_FILE:idf::touch_element>
 $<TARGET_FILE:idf::usb>
 $<TARGET_FILE:idf::wifi_provisioning>
 $<TARGET_FILE:__idf_json>
-$<TARGET_FILE:idf::espressif__dl_fft>
-$<TARGET_FILE:idf::espressif__esp-dsp>
-$<TARGET_FILE:idf::espressif__esp-sr>
-$<TARGET_FILE:__idf_spiffs>
-$<TARGET_FILE:__idf_espressif__dl_fft>
-$<TARGET_FILE:__idf_espressif__esp-dsp>
 $<TARGET_FILE:idf::espressif__esp_codec_dev>
 $<TARGET_FILE:idf::hardware_driver>
 $<TARGET_FILE:__idf_fatfs>
+$<TARGET_FILE:__idf_spiffs>
 $<TARGET_FILE:__idf_espressif__esp_codec_dev>
 $<TARGET_FILE:idf::player>
 $<TARGET_FILE:__idf_hardware_driver>
@@ -177,10 +172,7 @@ $<TARGET_FILE:idf::abobija__rc522>
 $<TARGET_FILE:idf::espressif__cJSON>
 $<TARGET_FILE:idf::espressif__led_strip>
 $<TARGET_FILE:idf::main>
-$<TARGET_FILE:__idf_espressif__esp-sr>
 $<TARGET_FILE:__idf_player>
 $<TARGET_FILE:__idf_abobija__rc522>
 $<TARGET_FILE:__idf_espressif__cJSON>
 $<TARGET_FILE:__idf_espressif__led_strip>
-$<TARGET_FILE:idf::perf_tester>
-$<TARGET_FILE:idf::sr_ringbuf>

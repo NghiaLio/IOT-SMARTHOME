@@ -161,15 +161,10 @@ D:/IOTT/wifi-config/build/esp-idf/touch_element/libtouch_element.a
 D:/IOTT/wifi-config/build/esp-idf/usb/libusb.a
 D:/IOTT/wifi-config/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
 D:/IOTT/wifi-config/build/esp-idf/json/libjson.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__dl_fft/libespressif__dl_fft.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__esp-dsp/libespressif__esp-dsp.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__esp-sr/libespressif__esp-sr.a
-D:/IOTT/wifi-config/build/esp-idf/spiffs/libspiffs.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__dl_fft/libespressif__dl_fft.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__esp-dsp/libespressif__esp-dsp.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__esp_codec_dev/libespressif__esp_codec_dev.a
 D:/IOTT/wifi-config/build/esp-idf/hardware_driver/libhardware_driver.a
 D:/IOTT/wifi-config/build/esp-idf/fatfs/libfatfs.a
+D:/IOTT/wifi-config/build/esp-idf/spiffs/libspiffs.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__esp_codec_dev/libespressif__esp_codec_dev.a
 D:/IOTT/wifi-config/build/esp-idf/player/libplayer.a
 D:/IOTT/wifi-config/build/esp-idf/hardware_driver/libhardware_driver.a
@@ -177,10 +172,7 @@ D:/IOTT/wifi-config/build/esp-idf/abobija__rc522/libabobija__rc522.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__cJSON/libespressif__cJSON.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
 D:/IOTT/wifi-config/build/esp-idf/main/libmain.a
-D:/IOTT/wifi-config/build/esp-idf/espressif__esp-sr/libespressif__esp-sr.a
 D:/IOTT/wifi-config/build/esp-idf/player/libplayer.a
 D:/IOTT/wifi-config/build/esp-idf/abobija__rc522/libabobija__rc522.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__cJSON/libespressif__cJSON.a
 D:/IOTT/wifi-config/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
-D:/IOTT/wifi-config/build/esp-idf/perf_tester/libperf_tester.a
-D:/IOTT/wifi-config/build/esp-idf/sr_ringbuf/libsr_ringbuf.a

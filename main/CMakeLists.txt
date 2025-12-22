@@ -1,3 +1,10 @@
-idf_component_register(SRCS "i2s.c"
+idf_component_register(SRCS "i2s.c" 
+                            "wifi_manager.c"
+                            "firebase_handler.c"
+                            "voice_handler.c"
+                            "rfid_handler.c"
+                            "sensors.c"
+                            "actuators.c"
+                            "i2s_mic.c"
                        INCLUDE_DIRS "."
-                        REQUIRES esp_wifi esp_http_client esp_event nvs_flash esp_system lwip esp_netif esp_http_server driver esp-tls esp_adc esp_timer esp-sr hardware_driver player)
+                        REQUIRES esp_wifi esp_http_client esp_event nvs_flash esp_system lwip esp_netif esp_http_server driver esp-tls esp_adc esp_timer hardware_driver player)

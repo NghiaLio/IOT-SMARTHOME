@@ -19,44 +19,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.7.19
-  espressif/dl_fft:
-    component_hash: 7dadbd644c0d7ba4733cc3726ec4cff6edf27b043725e1115861dec1609a3d28
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 0.3.1
-  espressif/esp-dsp:
-    component_hash: 619639efc18cfa361a9e423739b9b0ffc14991effc6c027f955c2f2c3bf1754b
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.2'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.6.0
-  espressif/esp-sr:
-    component_hash: 1b731f6ddb493361dcf3d256e3877c58ccac50455437bc584057e08b44df6040
-    dependencies:
-    - name: espressif/dl_fft
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=0.2.0'
-    - name: espressif/esp-dsp
-      registry_url: https://components.espressif.com
-      require: private
-      version: 1.6.0
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.2.2
   espressif/esp_codec_dev:
     component_hash: 1a3a2e518cd8b52e8796ec393a4050977f8f113599056faf085a02a57e194f86
     dependencies:
@@ -84,9 +46,8 @@ dependencies:
 direct_dependencies:
 - abobija/rc522
 - espressif/cJSON
-- espressif/esp-sr
 - espressif/esp_codec_dev
 - espressif/led_strip
-manifest_hash: b451b812130e9281d8b2cbd29f90e0c9e6999e614b6b7d9e5135b1a3b44708d9
+manifest_hash: 3ee48e80dcd4998974c5d35388e40f3d70913a9ac7c8106bd7c50c5beea0a2e5
 target: esp32s3
 version: 2.0.0
