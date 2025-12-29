@@ -24,12 +24,12 @@
 #define I2S_SCK_PIN         GPIO_NUM_11
 #define I2S_WS_PIN          GPIO_NUM_12
 #define I2S_SD_PIN          GPIO_NUM_10
-#define I2S_MCLK_PIN        GPIO_NUM_13
+// #define I2S_MCLK_PIN        GPIO_NUM_13
 #define LED_PIN             GPIO_NUM_2
 
 // RFID RC522 pins
 #define RC522_SDA_GPIO      5
-#define RC522_SCK_GPIO      21
+#define RC522_SCK_GPIO      21   
 #define RC522_MOSI_GPIO     20
 #define RC522_MISO_GPIO     19
 #define RC522_RST_GPIO      -1

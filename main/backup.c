@@ -20,6 +20,8 @@
 #include "rc522_picc.h"
 #include <esp_timer.h>
 #include <nvs.h>
+#include "config.h"
+#include "actuators.h"
 
 // ============================================================
 // 1. CẤU HÌNH NGƯỜI DÙNG (THAY ĐỔI TẠI ĐÂY)
@@ -967,57 +969,10 @@ void init_led() {
     gpio_set_level(BUZZER_PIN, 0); // Tắt còi ban đầu
 }
 
-void init_servo() {
-    ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_13_BIT,
-        .timer_num = SERVO_LIGHT_TIMER,
-        .freq_hz = 50,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&timer_conf);
-
-    ledc_channel_config_t channel_conf = {
-        .gpio_num = SERVO_LIGHT_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = SERVO_LIGHT_CHANNEL,
-        .timer_sel = SERVO_LIGHT_TIMER,
-        .duty = 0,
-        .hpoint = 0
-    };
-    ledc_channel_config(&channel_conf);
-
-    // Config for rain servo
-    ledc_timer_config_t rain_timer_conf = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_13_BIT,
-        .timer_num = RAIN_SERVO_TIMER,
-        .freq_hz = 50,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&rain_timer_conf);
-
-    ledc_channel_config_t rain_channel_conf = {
-        .gpio_num = RAIN_SERVO_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = RAIN_SERVO_CHANNEL,
-        .timer_sel = RAIN_SERVO_TIMER,
-        .duty = 0,
-        .hpoint = 0
-    };
-    ledc_channel_config(&rain_channel_conf);
-}
-
 void set_servo_angle(int angle) {
     uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL);
-}
-
-void set_rain_servo_angle(int angle) {
-    uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, RAIN_SERVO_CHANNEL, duty);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, RAIN_SERVO_CHANNEL);
 }
 
 void init_adc(void) {

@@ -9,7 +9,7 @@ static const char *TAG = "ACTUATORS";
 // Device states
 int led_state = 0;
 int fan_state = 0;
-int door_angle = 0;
+int door_angle = 90;
 int ac_state = 0;
 int rain_angle = 0;
 
@@ -165,7 +165,8 @@ void init_servo(void) {
 }
 
 void set_servo_angle(int angle) {
-    uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
+    int adjusted_angle = 90 - (angle * 80 / 90);
+    uint32_t duty = (SERVO_MIN_PULSEWIDTH + (SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * adjusted_angle / SERVO_MAX_DEGREE) * (1 << LEDC_TIMER_13_BIT) / 20000;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, SERVO_LIGHT_CHANNEL);
 }

@@ -155,11 +155,11 @@ void app_task(void *args) {
                     prev_rain_detected = rain_detected;
                     // Control rain servo
                     if (rain_detected) {
+                        set_rain_servo_angle(180);
+                        rain_angle = 180;
+                    } else {
                         set_rain_servo_angle(0);
                         rain_angle = 0;
-                    } else {
-                        set_rain_servo_angle(90);
-                        rain_angle = 90;
                     }
                     char json[64];
                     sprintf(json, "{\"rainDetected\":%d,\"rainAngle\":%d}", rain_detected, rain_angle);
@@ -192,14 +192,27 @@ void app_task(void *args) {
             send_to_firebase(json, HTTP_METHOD_PATCH, "data.json");
         }
 
-        // Kiểm tra voice input
-        i2s_channel_read(rx_handle, temp_buf, sizeof(temp_buf), &r_bytes, 100);
+        
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+    // ============================================================
+    // TASK XU LY GIONG NOI (tach rieng)
+    // ============================================================
+void voice_task(void *args) {
+    int16_t temp_buf[256];
+    size_t r_bytes = 0;
+
+    while(1) {
         int vol = 0;
+        i2s_channel_read(rx_handle, temp_buf, sizeof(temp_buf), &r_bytes, 100);
+
         for(int i = 0; i < 256; i++) {
             int abs_val = abs(temp_buf[i]);
             if(abs_val > vol) vol = abs_val;
         }
-        
+
         if (vol > SOUND_THRESHOLD && wifi_connected) {
             ESP_LOGI(TAG, ">>> PHAT HIEN TIENG NOI (Vol: %d) <<<", vol);
             char *rec_buffer = (char *)calloc(1, RECORD_SIZE);
@@ -212,10 +225,11 @@ void app_task(void *args) {
                 free(rec_buffer);
                 ESP_LOGI(TAG, "Da giai phong RAM. Cho lenh moi...");
             }
+            // Xả rác mic sau khi ghi âm
             for(int i=0; i<10; i++) i2s_channel_read(rx_handle, temp_buf, sizeof(temp_buf), &r_bytes, 10);
-            vTaskDelay(pdMS_TO_TICKS(500)); 
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
-        
+
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
@@ -235,6 +249,8 @@ void app_main(void) {
     init_rfid();
     init_led();
     init_servo();
+    set_servo_angle(0);
+    set_rain_servo_angle(0);
     init_adc();
     
     // Initialize WiFi với WiFi Manager (hỗ trợ cấu hình động)
@@ -253,4 +269,7 @@ void app_main(void) {
     
     // Create main task (20KB stack for HTTPS operations)
     xTaskCreate(app_task, "main_logic", 20480, NULL, 5, NULL);
+
+        // Create voice task (12KB stack for audio + HTTP)
+    xTaskCreate(voice_task, "voice_logic", 12288, NULL, 4, NULL);
 }
