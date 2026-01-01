@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "wifi-config",
-    "project_version":    "2013951-dirty",
+    "project_version":    "126c782-dirty",
     "project_path":       "D:/IOTT/wifi-config",
     "idf_path":           "C:/Users/ADMIN/esp/v5.5.1/esp-idf",
     "build_dir":          "D:/IOTT/wifi-config/build",

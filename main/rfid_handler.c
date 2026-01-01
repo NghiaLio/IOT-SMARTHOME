@@ -82,7 +82,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
                     set_servo_angle(90);
                     door_angle = 90;
                     buzzer_beep_short();
-                    esp_timer_start_once(door_timer, 30000000);
+                    esp_timer_start_once(door_timer, 5000000);
                 } else {
                     ESP_LOGI(TAG, "UID khong hop le: %s", uid_str);
                 }
